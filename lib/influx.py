@@ -3,6 +3,7 @@
 
 import logging
 from influxdb import InfluxDBClient
+
 from lib.config import (
     INFLUXDB_HOST,
     INFLUXDB_USER,
@@ -11,10 +12,12 @@ from lib.config import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
 class InfluxClient(object):
-    def __init__(self, account_id):
-        self.account_id = account_id
-        self.influxdb = InfluxDBClient(INFLUXDB_HOST, INFLUXDB_PORT, INFLUXDB_USER, INFLUXDB_PASS, database=account_id, timeout=60, retries=3)
+    def __init__(self, db_name):
+        self.db_name = db_name
+        self.influxdb = InfluxDBClient(INFLUXDB_HOST, INFLUXDB_PORT, INFLUXDB_USER, INFLUXDB_PASS, database=db_name, timeout=60, retries=3)
 
     def get_measurement_list(self):
         measurements = []
@@ -42,12 +45,20 @@ class InfluxClient(object):
         except Exception:
             LOGGER.exception(query)
 
-    def copy_data_from_measurement(self, to_db, measurement, start_time, end_time):
+    def get_data_from_measurement_duration(self, measurement, start_time, end_time):
         try:
-            query = 'SELECT * INTO "{}"."ecmanaged"."{}" FROM "{}"."ecmanaged"."{}" WHERE time > \'{}\' AND time < \'{}\' GROUP BY *'.format(to_db, measurement, self.account_id, measurement, start_time, end_time)
+            query = 'SELECT * FROM "{}" WHERE time > \'{}\' AND time < \'{}\' GROUP BY *'.format(measurement, start_time, end_time)
             return self.influxdb.query(query)
         except Exception:
             LOGGER.exception(query)
+
+    def copy_data_from_measurement(self, to_db, measurement, start_time, end_time):
+        try:
+            query = 'SELECT * INTO "{}"."ecmanaged"."{}" FROM "{}"."ecmanaged"."{}" WHERE time > \'{}\' AND time < \'{}\' GROUP BY *'.format(to_db, measurement, self.db_name, measurement, start_time, end_time)
+            return self.influxdb.query(query)
+        except Exception:
+            LOGGER.exception(query)
+
 
 
 

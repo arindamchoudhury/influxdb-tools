@@ -4,22 +4,23 @@ import coloredlogs
 import logging
 import argparse
 import os
+import pickle
 from lib.influx import InfluxClient
+from lib.influx_helper import convert_to_lp
 from datetime import datetime, timedelta
 from time import sleep
-import pickle
 
-WHOAMI = 'influxdb-copy-database'
+WHOAMI = 'influxdb-backup-database'
 
 LOGGER = logging.getLogger(WHOAMI)
 
 coloredlogs.install(level="INFO", fmt='%(asctime)s,%(msecs)03d %(name)s[%(process)d] line:%(lineno)d %(levelname)s %(message)s')
 logging.getLogger('urllib3').setLevel(logging.WARNING)
 
-def main(from_db, to_db):
-    influxdb_cli = InfluxClient(from_db)
+def main(db):
+    influxdb_cli = InfluxClient(db)
     measurements_list = influxdb_cli.get_measurement_list()
-    progress_file = "progress_{}_{}.json".format(from_db, to_db)
+    progress_file = "progress_backup_{}.json".format(db)
     progress = []
     if not os.path.exists(progress_file):
         os.mknod(progress_file)
@@ -29,6 +30,7 @@ def main(from_db, to_db):
     LOGGER.info("progress %s", progress)
     done = 1
     for measurement in measurements_list:
+        measurement_data = []
         if measurement in progress:
             LOGGER.info("mesurement %s already processed", measurement)
             done = done + 1
@@ -36,6 +38,7 @@ def main(from_db, to_db):
 
         LOGGER.info("processing mesurement %s (%s/%s)", measurement, done, len(measurements_list))
         end_time = influxdb_cli.get_end_time(measurement)
+        measurement_backup_file = "influxdb_{}_{}_{}.backup".format(db, measurement, end_time)
         end_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%SZ')
 
         while(True):
@@ -49,23 +52,32 @@ def main(from_db, to_db):
                 progress.append(measurement)
                 with open(progress_file, 'wb') as filehandle:
                     pickle.dump(progress, filehandle)
+
+                with open(measurement_backup_file, mode='wt', encoding='utf-8') as filehandle:
+                    filehandle.write('\n'.join(measurement_data))
+                    filehandle.write('\n')
+
                 break
 
             # LOGGER.info("data_exists %s", data_exists)
-            LOGGER.info("moving data %s -> %s :: %s %s -> %s", from_db, to_db, measurement, start_time_str, end_time_str)
-            res = influxdb_cli.copy_data_from_measurement(to_db, measurement, start_time_str, end_time_str)
+            LOGGER.info("backing up data %s %s %s -> %s", db, measurement, start_time_str, end_time_str)
+            res = influxdb_cli.get_data_from_measurement_duration(measurement, start_time_str, end_time_str)
+            for _, series in res.keys():
+                series_data = list(res.get_points(tags=series))
+                for data in series_data:
+                    measurement_data.append(convert_to_lp(measurement, series, data))
             #LOGGER.info(res)
             end_time = start_time
             sleep(1)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='InfluxDB script for copying data to another database')
-    parser.add_argument('--from_db', required=True, help='InfluxDB source database')
-    parser.add_argument('--to_db', required=True, help='InfluxDB destination database')
+    parser = argparse.ArgumentParser(description='script for backing up influxdb database')
+    parser.add_argument('--db', required=True, help='InfluxDB database to backup')
     args = parser.parse_args()
 
-    main(args.from_db, args.to_db)
+    main(args.db)
+
 
 
 
