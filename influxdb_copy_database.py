@@ -39,7 +39,7 @@ def main(from_db, to_db):
         end_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%SZ')
 
         while(True):
-            start_time = end_time - timedelta(days=2)
+            start_time = end_time - timedelta(hours=2)
             start_time_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             data_exists = influxdb_cli.data_exists_duration(measurement, start_time_str, end_time_str)

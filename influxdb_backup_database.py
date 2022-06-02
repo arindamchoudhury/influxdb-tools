@@ -38,11 +38,15 @@ def main(db):
 
         LOGGER.info("processing mesurement %s (%s/%s)", measurement, done, len(measurements_list))
         end_time = influxdb_cli.get_end_time(measurement)
+
         measurement_backup_file = "influxdb_{}_{}_{}.backup".format(db, measurement, end_time)
+        if not os.path.exists(measurement_backup_file):
+            os.mknod(measurement_backup_file)
+
         end_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%SZ')
 
         while(True):
-            start_time = end_time - timedelta(days=2)
+            start_time = end_time - timedelta(hours=6)
             start_time_str = start_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             end_time_str = end_time.strftime('%Y-%m-%dT%H:%M:%SZ')
             data_exists = influxdb_cli.data_exists_duration(measurement, start_time_str, end_time_str)
@@ -53,9 +57,11 @@ def main(db):
                 with open(progress_file, 'wb') as filehandle:
                     pickle.dump(progress, filehandle)
 
-                with open(measurement_backup_file, mode='wt', encoding='utf-8') as filehandle:
-                    filehandle.write('\n'.join(measurement_data))
-                    filehandle.write('\n')
+                lines = []
+                with open(measurement_backup_file) as file:
+                    lines = [line.strip() for line in file]
+
+                LOGGER.info("%s has %s lines", measurement_backup_file, len(lines))
 
                 break
 
@@ -66,7 +72,16 @@ def main(db):
                 series_data = list(res.get_points(tags=series))
                 for data in series_data:
                     measurement_data.append(convert_to_lp(measurement, series, data))
-            #LOGGER.info(res)
+
+            try:
+                with open(measurement_backup_file, mode='a', encoding='utf-8') as filehandle:
+                    LOGGER.info("writing %s lines to %s", len(measurement_data), measurement_backup_file)
+                    filehandle.write('\n'.join(measurement_data))
+                    filehandle.write('\n')
+                measurement_data = []
+            except Exception:
+                LOGGER.exception("failed to write to %s", measurement_backup_file)
+
             end_time = start_time
             sleep(1)
 
