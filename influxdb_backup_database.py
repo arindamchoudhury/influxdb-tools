@@ -44,6 +44,7 @@ def main(db):
             os.mknod(measurement_backup_file)
         else:
             os.remove(measurement_backup_file)
+            os.mknod(measurement_backup_file)
 
         end_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%SZ')
 
